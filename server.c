@@ -12,8 +12,9 @@
 #define PORT 8080
 #define BUFFER_SIZE 1024
 #define PATH_MAX 1024
-
-// todo add layout and use page files as partials
+#define PAGE_ROUTE "src/pages"
+#define LAYOUTS_ROUTE "src/layouts"
+// todo refactor this, and expand templating to allow components to be popped in... maybe something like angular.
 
 // Global so that I can free address
 int sockfd, newsockfd = -1;
@@ -81,7 +82,7 @@ int main()
     newsockfd = accept(sockfd, (struct sockaddr *)&host_addr, (socklen_t *)&host_addrlen);
     if (newsockfd < 0)
     {
-      
+
       perror("webserver (accept)");
       continue;
     }
@@ -91,7 +92,7 @@ int main()
     int sockn = getsockname(newsockfd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addrlen);
     if (sockn < 0)
     {
-      
+
       perror("webserver (getsockname)");
       continue;
     }
@@ -100,7 +101,7 @@ int main()
     int valread = read(newsockfd, buffer, BUFFER_SIZE);
     if (valread < 0)
     {
-      
+
       perror("webserver (read)");
       continue;
     }
@@ -111,20 +112,19 @@ int main()
     printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), method, version, uri);
 
     // Construct the file path
-    char file_path[PATH_MAX + 17] = "";
-    snprintf(file_path, sizeof(file_path), "pages%s", uri);
-    
+    char file_path[PATH_MAX + 20] = "";
+    snprintf(file_path, sizeof(file_path), "%s%s",PAGE_ROUTE, uri);
 
     // If the file path corresponds to a directory, set a flag
     int is_directory = isDir(file_path);
     // if (access(file_path, F_OK) == 0 && file_path[strlen(file_path) - 1] == '/')
     if (is_directory == 0 && file_path[strlen(file_path) - 1] == '/')
     {
-      snprintf(file_path, sizeof(file_path), "pages%sindex.html", uri);
+      snprintf(file_path, sizeof(file_path), "%s%sindex.html", PAGE_ROUTE, uri);
     }
     else if (is_directory == 0)
-    {      
-      snprintf(file_path, sizeof(file_path), "pages%s/index.html", uri);
+    {
+      snprintf(file_path, sizeof(file_path), "%s%s/index.html", PAGE_ROUTE, uri);
     }
 
     // Open the requested file
@@ -132,17 +132,17 @@ int main()
     requested_file = fopen(file_path, "r");
     if (requested_file == NULL)
     {
-      
+
       if (ends_with(uri, "/"))
       {
         int length = strlen(uri);
         uri[length - 1] = '\0';
       }
-      snprintf(file_path, sizeof(file_path), "pages%s.html", uri);
+      snprintf(file_path, sizeof(file_path), "%s%s.html", PAGE_ROUTE, uri);
       requested_file = fopen(file_path, "r");
       if (requested_file == NULL)
       {
-        
+
         // If it's a directory and index.html doesn't exist, return 404 Not Found response
         char not_found[] = "HTTP/1.0 404 Not Found\r\n"
                            "Server: webserver-c\r\n"
@@ -169,7 +169,7 @@ int main()
     char *file_contents = malloc(file_size + 1);
     if (file_contents == NULL)
     {
-      
+
       perror("Memory allocation failed");
       free(file_contents);
       fclose(requested_file);
@@ -190,7 +190,7 @@ int main()
 
     // Load the layout file
     char layout_path[PATH_MAX];
-    snprintf(layout_path, sizeof(layout_path), "layouts/application.html");
+    snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
     FILE *layout_file = fopen(layout_path, "r");
     if (layout_file == NULL)
     {
@@ -242,6 +242,10 @@ int main()
     {
       content_type = "application/javascript";
     }
+    else if (ends_with(uri, ".ico"))
+    {
+      content_type = "image/x-icon";
+    }
     else
     {
       content_type = "text/html";
@@ -254,6 +258,78 @@ int main()
                "Content-Type: %s\r\n"
                "Content-Length: %ld\r\n\r\n%s",
                content_type, strlen(final_contents), final_contents);
+      // Send the HTTP response
+      ssize_t bytes_written = write(newsockfd, response, strlen(response));
+      if (bytes_written < 0)
+      {
+        perror("Error sending response");
+      }
+    }
+    else if (strcmp(content_type, "image/x-icon") == 0)
+    {
+
+      // Open the favicon.ico file
+  FILE *favicon_file = fopen("src/favicon.ico", "rb");
+  if (favicon_file == NULL)
+  {
+    perror("Error opening favicon.ico file");
+    continue;
+  }
+
+  // Determine the favicon file size
+  fseek(favicon_file, 0, SEEK_END);
+  long favicon_size = ftell(favicon_file);
+  fseek(favicon_file, 0, SEEK_SET);
+
+  // Allocate memory to store the favicon file contents
+  char *favicon_contents = malloc(favicon_size);
+  if (favicon_contents == NULL)
+  {
+    perror("Memory allocation failed");
+    fclose(favicon_file);
+    continue;
+  }
+
+  // Read the favicon file contents into memory
+  size_t bytes_read = fread(favicon_contents, 1, favicon_size, favicon_file);
+  if (bytes_read != favicon_size)
+  {
+    perror("Error reading the favicon file");
+    fclose(favicon_file);
+    free(favicon_contents);
+    continue;
+  }
+
+  // Close the favicon file
+  fclose(favicon_file);
+
+  // Construct the HTTP response for the favicon file
+  char favicon_response[BUFFER_SIZE];
+  snprintf(favicon_response, sizeof(favicon_response),
+           "HTTP/1.1 200 OK\r\n"
+           "Content-Type: image/x-icon\r\n"
+           "Content-Length: %ld\r\n\r\n", favicon_size);
+
+  // Send the HTTP response for the favicon file
+  ssize_t favicon_bytes_written = write(newsockfd, favicon_response, strlen(favicon_response));
+  if (favicon_bytes_written < 0)
+  {
+    perror("Error sending favicon response");
+    free(favicon_contents);
+    continue;
+  }
+
+  // Send the favicon file contents
+  ssize_t favicon_data_bytes_written = write(newsockfd, favicon_contents, favicon_size);
+  if (favicon_data_bytes_written < 0)
+  {
+    perror("Error sending favicon file");
+    free(favicon_contents);
+    continue;
+  }
+
+  // Clean up resources
+  free(favicon_contents);
     }
     else
     {
@@ -262,13 +338,12 @@ int main()
                "Content-Type: %s\r\n"
                "Content-Length: %ld\r\n\r\n%s",
                content_type, strlen(file_contents), file_contents);
-    }
-
-    // Send the HTTP response
-    ssize_t bytes_written = write(newsockfd, response, strlen(response));
-    if (bytes_written < 0)
-    {
-      perror("Error sending response");
+      // Send the HTTP response
+      ssize_t bytes_written = write(newsockfd, response, strlen(response));
+      if (bytes_written < 0)
+      {
+        perror("Error sending response");
+      }
     }
 
     // Clean up resources
@@ -312,7 +387,8 @@ int isDir(char *fileName)
 {
   struct stat path;
 
-  if (stat(fileName, &path) == -1) {
+  if (stat(fileName, &path) == -1)
+  {
     // Error occurred while retrieving file information
     perror("stat");
     return -1;
