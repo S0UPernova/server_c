@@ -258,7 +258,7 @@ int main()
     else
     {
       snprintf(response, sizeof(response),
-               "HTTP/1.1 404 NOT FOUND\r\n"
+               "HTTP/1.1 200 OK\r\n"
                "Content-Type: %s\r\n"
                "Content-Length: %ld\r\n\r\n%s",
                content_type, strlen(file_contents), file_contents);
