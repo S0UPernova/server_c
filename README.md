@@ -26,3 +26,6 @@ valgrind ./server --leak-check=full
 - maybe make a standard way to insert templates into the file maybe like flask's {{}}.
 - look into making this follow the mvc pattern.
 - refactor more to make it easier to follow.
+- add application.js
+- use templating to somehow add to <head></head> a script link for the page you visit.
+- maybe move css to its own folder (idk I like having it in pages, but maybe figure out having both).
