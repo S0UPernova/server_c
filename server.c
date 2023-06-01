@@ -15,18 +15,27 @@
 #define PATH_MAX 1024
 #define PAGE_ROUTE "src/pages"
 #define LAYOUTS_ROUTE "src/layouts"
+#define OK "200 OK"
 // todo refactor this, and expand templating to allow components to be popped in... maybe something like angular.
 
-#include "handle_file.h" // make sure to compile with handle_file.c
+#include "handle_file.h"      // make sure to compile with handle_file.c
 #include "string_functions.h" // make sure to compile with handle_placeholder.c
 
 // Global so that I can free address
 int sockfd, newsockfd = -1;
+struct response *res = NULL;
 
 // function prototypes
 void handle_sigint(int signum);
 int ends_with(char *str, char *suffix);
 int isDir(char *fileName);
+// struct response
+// {
+//   char status[BUFFER_SIZE];
+//   char content_type[BUFFER_SIZE];
+//   long length;
+//   char content[BUFFER_SIZE];
+// };
 
 int main()
 {
@@ -81,6 +90,8 @@ int main()
 
   for (;;)
   {
+    res = malloc(sizeof(struct response));
+
     // Accept incoming connections
     newsockfd = accept(sockfd, (struct sockaddr *)&host_addr, (socklen_t *)&host_addrlen);
     if (newsockfd < 0)
@@ -131,7 +142,8 @@ int main()
     {
       is_directory = -1;
     }
-    else {
+    else
+    {
       is_directory = isDir(file_path);
     }
     // if (access(file_path, F_OK) == 0 && file_path[strlen(file_path) - 1] == '/')
@@ -181,13 +193,10 @@ int main()
     snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
     struct file *layout = load_file(layout_path);
 
-    // Replace the placeholder tag in the layout file with the file contents
-    char placeholder[20] = "<body-placeholder/>";
-    char *final_contents = replace_placeholder(layout->content, placeholder, file->content);
-
     // Construct the HTTP response
-    char response[BUFFER_SIZE];
-    const char *content_type;
+    // char response[BUFFER_SIZE]; // todo remove
+    const char *content_type; // todo remove
+
     if (ends_with(uri, ".css"))
     {
       content_type = "text/css";
@@ -205,73 +214,36 @@ int main()
       content_type = "text/html";
     }
 
+    //todo figure out a way to make this work for both cases without if statement, maybe move the place holder logic to respond? 
     if (strcmp(content_type, "text/html") == 0)
     {
-      snprintf(response, sizeof(response),
-               "HTTP/1.1 200 OK\r\n"
-               "Content-Type: %s\r\n"
-               "Content-Length: %ld\r\n\r\n%s",
-               content_type, strlen(final_contents), final_contents);
-      // Send the HTTP response
-      ssize_t bytes_written = write(newsockfd, response, strlen(response));
-      if (bytes_written < 0)
-      {
-        perror("Error sending response");
-      }
-    }
-    else if (strcmp(content_type, "image/x-icon") == 0)
-    {
-      char *favicon_path = "src/favicon.ico";
-      struct file *favicon = load_file(favicon_path);
+      // Replace the placeholder tag in the layout file with the file contents
+      char placeholder[20] = "<body-placeholder/>";
+      //todo... maybe change this to modify a buffer passed in.
+      char *final_contents = replace_placeholder(layout->content, placeholder, file->content);
+      
+      snprintf(res->content_type, 80, "%s", content_type);
+      snprintf(res->status, (strlen(OK) + 1), "%s", OK);
+      snprintf(res->content, strlen(final_contents), "%s", final_contents);
+      res->length = strlen(final_contents);
+      respond(newsockfd, res, NULL);
 
-      // Construct the HTTP response for the favicon file
-      char favicon_response[BUFFER_SIZE];
-      snprintf(favicon_response, sizeof(favicon_response),
-               "HTTP/1.1 200 OK\r\n"
-               "Content-Type: image/x-icon\r\n"
-               "Content-Length: %ld\r\n\r\n",
-               favicon->size);
-
-      // Send the HTTP response for the favicon file
-      ssize_t favicon_bytes_written = write(newsockfd, favicon_response, strlen(favicon_response));
-      if (favicon_bytes_written < 0)
-      {
-        perror("Error sending favicon response");
-        free(favicon->content);
-        continue;
-      }
-
-      // Send the favicon file contents
-      ssize_t favicon_data_bytes_written = write(newsockfd, favicon->content, favicon->size);
-      if (favicon_data_bytes_written < 0)
-      {
-        perror("Error sending favicon file");
-        close_file(favicon);
-        continue;
-      }
-
-      // Clean up resources
-      close_file(favicon);
+      free(final_contents);
     }
     else
     {
-      snprintf(response, sizeof(response),
-               "HTTP/1.1 200 OK\r\n"
-               "Content-Type: %s\r\n"
-               "Content-Length: %ld\r\n\r\n%s",
-               content_type, strlen(file->content), file->content);
-      // Send the HTTP response
-      ssize_t bytes_written = write(newsockfd, response, strlen(response));
-      if (bytes_written < 0)
-      {
-        perror("Error sending response");
-      }
+
+      snprintf(res->content_type, 80, "%s", content_type);
+      snprintf(res->status, (strlen(OK) + 1), "%s", OK);
+      snprintf(res->content, file->size, "%s", file->content);
+      res->length = file->size;
+      respond(newsockfd, res, file);
     }
     close_file(file);
     close_file(layout);
-    free(final_contents);
-
+    // free(final_contents);
     close(newsockfd);
+    free(res); //! will have to change this later. ~maybe
   }
 
   return 0;
@@ -287,6 +259,10 @@ void handle_sigint(int signum)
   if (newsockfd != -1)
   {
     close(newsockfd);
+  }
+  if (res != NULL)
+  {
+    free(res);
   }
   exit(signum);
 }

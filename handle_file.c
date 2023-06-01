@@ -1,19 +1,32 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#define BUFFER_SIZE 1024
 struct file
 {
   FILE *address;
   long size;
   char *content;
 };
+struct response
+{
+  char status[BUFFER_SIZE];
+  char content_type[BUFFER_SIZE];
+  long length;
+  char content[BUFFER_SIZE];
+};
 
-struct file *load_file(char * file_path)
+struct file *load_file(char *file_path)
 {
   FILE *requested_file = NULL;
   requested_file = fopen(file_path, "r");
-  if (requested_file == NULL) {
+  if (requested_file == NULL)
+  {
     return NULL;
   }
   // Determine the file size
@@ -43,7 +56,7 @@ struct file *load_file(char * file_path)
     // continue;
     return NULL;
   }
-    // Add ending NULL byte
+  // Add ending NULL byte
   file_content[file_size] = '\0';
 
   struct file *output = malloc(sizeof(struct file));
@@ -52,7 +65,6 @@ struct file *load_file(char * file_path)
   output->content = file_content;
   return output;
 }
-
 
 // Closes struct file, and frees memory used by it.
 void close_file(struct file *file)
@@ -63,12 +75,49 @@ void close_file(struct file *file)
   return;
 }
 
-// Helper function to check if a string ends with a specific suffix
-int ends_with(char *str, char *suffix)
+// returns -1 on failure else the length of the response
+ssize_t respond(int socketfd, struct response *response, struct file *file)
 {
-  size_t str_len = strlen(str);
-  size_t suffix_len = strlen(suffix);
-  if (str_len < suffix_len)
-    return 0;
-  return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
+  if (file != NULL)
+  {
+    // Construct the HTTP response for the favicon file
+    snprintf(response->content, (strlen(response->content) + BUFFER_SIZE),
+             "HTTP/1.1 %s\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %ld\r\n\r\n"
+             "%s",
+             response->status, response->content_type, strlen(file->content), file->content);
+
+    // Send the HTTP response for the file file
+    ssize_t file_bytes_written = write(socketfd, response->content, strlen(response->content));
+
+    if (file_bytes_written < 0)
+    {
+      perror("Error sending response");
+      return -1;
+    }
+
+    return file_bytes_written;
+  }
+  else
+  {
+    char temp[BUFFER_SIZE];
+
+    // Construct the HTTP response for the favicon file
+    snprintf(temp, (strlen(response->content) + BUFFER_SIZE),
+             "HTTP/1.1 %s\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %ld\r\n\r\n"
+             "%s",
+             response->status, response->content_type, strlen(response->content), response->content);
+
+    // Send the HTTP response for the file file
+    ssize_t file_bytes_written = write(socketfd, temp, strlen(temp));
+    if (file_bytes_written < 0)
+    {
+      perror("Error sending response");
+      return -1;
+    }
+    return file_bytes_written;
+  }
 }

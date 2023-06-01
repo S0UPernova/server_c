@@ -40,3 +40,13 @@ char *replace_placeholder(char *str, char *placeholder, char *content)
   strcat(new_str, tag_start + placeholder_len);
   return new_str;
 }
+
+// Helper function to check if a string ends with a specific suffix
+int ends_with(char *str, char *suffix)
+{
+  size_t str_len = strlen(str);
+  size_t suffix_len = strlen(suffix);
+  if (str_len < suffix_len)
+    return 0;
+  return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
+}
