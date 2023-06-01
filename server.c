@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -16,6 +17,9 @@
 #define LAYOUTS_ROUTE "src/layouts"
 // todo refactor this, and expand templating to allow components to be popped in... maybe something like angular.
 
+#include "handle_file.h" // make sure to compile with handle_file.c
+#include "string_functions.h" // make sure to compile with handle_placeholder.c
+
 // Global so that I can free address
 int sockfd, newsockfd = -1;
 
@@ -23,7 +27,6 @@ int sockfd, newsockfd = -1;
 void handle_sigint(int signum);
 int ends_with(char *str, char *suffix);
 int isDir(char *fileName);
-char *replace_placeholder(char *str, char *placeholder, char *content);
 
 int main()
 {
@@ -113,10 +116,24 @@ int main()
 
     // Construct the file path
     char file_path[PATH_MAX + 20] = "";
-    snprintf(file_path, sizeof(file_path), "%s%s",PAGE_ROUTE, uri);
+    if (!ends_with(uri, ".ico"))
+    {
+      snprintf(file_path, sizeof(file_path), "%s%s", PAGE_ROUTE, uri);
+    }
+    else
+    {
+      snprintf(file_path, sizeof(file_path), "%s%s", "src", uri);
+    }
 
     // If the file path corresponds to a directory, set a flag
-    int is_directory = isDir(file_path);
+    int is_directory = 0;
+    if (ends_with(uri, ".css") || ends_with(uri, ".js") || ends_with(uri, ".ico"))
+    {
+      is_directory = -1;
+    }
+    else {
+      is_directory = isDir(file_path);
+    }
     // if (access(file_path, F_OK) == 0 && file_path[strlen(file_path) - 1] == '/')
     if (is_directory == 0 && file_path[strlen(file_path) - 1] == '/')
     {
@@ -127,10 +144,10 @@ int main()
       snprintf(file_path, sizeof(file_path), "%s%s/index.html", PAGE_ROUTE, uri);
     }
 
-    // Open the requested file
-    FILE *requested_file = NULL;
-    requested_file = fopen(file_path, "r");
-    if (requested_file == NULL)
+    // load requested file
+    struct file *file = load_file(file_path);
+
+    if (file == NULL)
     {
 
       if (ends_with(uri, "/"))
@@ -139,8 +156,8 @@ int main()
         uri[length - 1] = '\0';
       }
       snprintf(file_path, sizeof(file_path), "%s%s.html", PAGE_ROUTE, uri);
-      requested_file = fopen(file_path, "r");
-      if (requested_file == NULL)
+      file = load_file(file_path);
+      if (file == NULL)
       {
 
         // If it's a directory and index.html doesn't exist, return 404 Not Found response
@@ -159,77 +176,14 @@ int main()
       }
     }
 
-    // Determine the file size
-    fseek(requested_file, 0, SEEK_END);
-    long file_size = ftell(requested_file);
-    fseek(requested_file, 0, SEEK_SET);
-
-    // Allocate memory to store the file contents
-    // char *file_contents = malloc(file_size + 1);
-    char *file_contents = malloc(file_size + 1);
-    if (file_contents == NULL)
-    {
-
-      perror("Memory allocation failed");
-      free(file_contents);
-      fclose(requested_file);
-      continue;
-    }
-
-    // Read the file contents into memory
-    size_t bytes_read = fread(file_contents, 1, file_size, requested_file);
-    if (bytes_read != file_size)
-    {
-      perror("Error reading the file");
-      fclose(requested_file);
-      free(file_contents);
-      continue;
-    }
-
-    file_contents[file_size] = '\0';
-
-    // Load the layout file
+    // Load the layout fil
     char layout_path[PATH_MAX];
     snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
-    FILE *layout_file = fopen(layout_path, "r");
-    if (layout_file == NULL)
-    {
-      perror("Error opening layout file");
-      free(file_contents);
-      continue;
-    }
-
-    // Determine the layout file size
-    fseek(layout_file, 0, SEEK_END);
-    long layout_size = ftell(layout_file);
-    fseek(layout_file, 0, SEEK_SET);
-
-    // Allocate memory to store the layout file contents
-    char *layout_contents = malloc(layout_size + 1);
-    if (layout_contents == NULL)
-    {
-      perror("Memory allocation failed");
-      fclose(layout_file);
-      free(file_contents);
-      continue;
-    }
-
-    // Read the layout file contents into memory
-    size_t layout_bytes_read = fread(layout_contents, 1, layout_size, layout_file);
-    if (layout_bytes_read != layout_size)
-    {
-      perror("Error reading the layout file");
-      fclose(layout_file);
-      free(layout_contents);
-      fclose(requested_file);
-      free(file_contents);
-      continue;
-    }
-    layout_contents[layout_size] = '\0';
+    struct file *layout = load_file(layout_path);
 
     // Replace the placeholder tag in the layout file with the file contents
     char placeholder[20] = "<body-placeholder/>";
-    char *final_contents = replace_placeholder(layout_contents, placeholder, file_contents);
+    char *final_contents = replace_placeholder(layout->content, placeholder, file->content);
 
     // Construct the HTTP response
     char response[BUFFER_SIZE];
@@ -267,69 +221,37 @@ int main()
     }
     else if (strcmp(content_type, "image/x-icon") == 0)
     {
+      char *favicon_path = "src/favicon.ico";
+      struct file *favicon = load_file(favicon_path);
 
-      // Open the favicon.ico file
-  FILE *favicon_file = fopen("src/favicon.ico", "rb");
-  if (favicon_file == NULL)
-  {
-    perror("Error opening favicon.ico file");
-    continue;
-  }
+      // Construct the HTTP response for the favicon file
+      char favicon_response[BUFFER_SIZE];
+      snprintf(favicon_response, sizeof(favicon_response),
+               "HTTP/1.1 200 OK\r\n"
+               "Content-Type: image/x-icon\r\n"
+               "Content-Length: %ld\r\n\r\n",
+               favicon->size);
 
-  // Determine the favicon file size
-  fseek(favicon_file, 0, SEEK_END);
-  long favicon_size = ftell(favicon_file);
-  fseek(favicon_file, 0, SEEK_SET);
+      // Send the HTTP response for the favicon file
+      ssize_t favicon_bytes_written = write(newsockfd, favicon_response, strlen(favicon_response));
+      if (favicon_bytes_written < 0)
+      {
+        perror("Error sending favicon response");
+        free(favicon->content);
+        continue;
+      }
 
-  // Allocate memory to store the favicon file contents
-  char *favicon_contents = malloc(favicon_size);
-  if (favicon_contents == NULL)
-  {
-    perror("Memory allocation failed");
-    fclose(favicon_file);
-    continue;
-  }
+      // Send the favicon file contents
+      ssize_t favicon_data_bytes_written = write(newsockfd, favicon->content, favicon->size);
+      if (favicon_data_bytes_written < 0)
+      {
+        perror("Error sending favicon file");
+        close_file(favicon);
+        continue;
+      }
 
-  // Read the favicon file contents into memory
-  size_t bytes_read = fread(favicon_contents, 1, favicon_size, favicon_file);
-  if (bytes_read != favicon_size)
-  {
-    perror("Error reading the favicon file");
-    fclose(favicon_file);
-    free(favicon_contents);
-    continue;
-  }
-
-  // Close the favicon file
-  fclose(favicon_file);
-
-  // Construct the HTTP response for the favicon file
-  char favicon_response[BUFFER_SIZE];
-  snprintf(favicon_response, sizeof(favicon_response),
-           "HTTP/1.1 200 OK\r\n"
-           "Content-Type: image/x-icon\r\n"
-           "Content-Length: %ld\r\n\r\n", favicon_size);
-
-  // Send the HTTP response for the favicon file
-  ssize_t favicon_bytes_written = write(newsockfd, favicon_response, strlen(favicon_response));
-  if (favicon_bytes_written < 0)
-  {
-    perror("Error sending favicon response");
-    free(favicon_contents);
-    continue;
-  }
-
-  // Send the favicon file contents
-  ssize_t favicon_data_bytes_written = write(newsockfd, favicon_contents, favicon_size);
-  if (favicon_data_bytes_written < 0)
-  {
-    perror("Error sending favicon file");
-    free(favicon_contents);
-    continue;
-  }
-
-  // Clean up resources
-  free(favicon_contents);
+      // Clean up resources
+      close_file(favicon);
     }
     else
     {
@@ -337,7 +259,7 @@ int main()
                "HTTP/1.1 200 OK\r\n"
                "Content-Type: %s\r\n"
                "Content-Length: %ld\r\n\r\n%s",
-               content_type, strlen(file_contents), file_contents);
+               content_type, strlen(file->content), file->content);
       // Send the HTTP response
       ssize_t bytes_written = write(newsockfd, response, strlen(response));
       if (bytes_written < 0)
@@ -345,12 +267,8 @@ int main()
         perror("Error sending response");
       }
     }
-
-    // Clean up resources
-    fclose(requested_file);
-    fclose(layout_file);
-    free(file_contents);
-    free(layout_contents);
+    close_file(file);
+    close_file(layout);
     free(final_contents);
 
     close(newsockfd);
@@ -373,63 +291,14 @@ void handle_sigint(int signum)
   exit(signum);
 }
 
-// Helper function to check if a string ends with a specific suffix
-int ends_with(char *str, char *suffix)
-{
-  size_t str_len = strlen(str);
-  size_t suffix_len = strlen(suffix);
-  if (str_len < suffix_len)
-    return 0;
-  return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
-}
-
 int isDir(char *fileName)
 {
   struct stat path;
 
   if (stat(fileName, &path) == -1)
   {
-    // Error occurred while retrieving file information
-    perror("stat");
     return -1;
   }
 
   return S_ISREG(path.st_mode);
-}
-
-// Function to replace a placeholder tag in a string with given content
-char *replace_placeholder(char *str, char *placeholder, char *content)
-{
-  // Find the position of the placeholder tag
-  const char *tag_start = strstr(str, placeholder);
-  if (tag_start == NULL)
-  {
-    // Placeholder not found, return the original string
-    return strdup(str);
-  }
-
-  // Calculate the length of the new string
-  size_t placeholder_len = strlen(placeholder);
-  size_t content_len = strlen(content);
-  size_t new_str_len = strlen(str) - placeholder_len + content_len;
-
-  // Create a new string to store the result
-  char *new_str = malloc(new_str_len + 1);
-  if (new_str == NULL)
-  {
-    perror("Memory allocation failed");
-    return NULL;
-  }
-
-  // Copy the original string up to the placeholder position
-  size_t prefix_len = tag_start - str;
-  strncpy(new_str, str, prefix_len);
-  new_str[prefix_len] = '\0'; // Add NULL terminator
-
-  // Append the content
-  strcat(new_str, content);
-
-  // Append the rest of the original string
-  strcat(new_str, tag_start + placeholder_len);
-  return new_str;
 }
