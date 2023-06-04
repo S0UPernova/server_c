@@ -5,22 +5,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "handle_file.h"
 
 #define BUFFER_SIZE 1024
-struct file
-{
-  FILE *address;
-  long size;
-  char *content;
-};
-struct response
-{
-  char status[BUFFER_SIZE];
-  char content_type[BUFFER_SIZE];
-  long length;
-  char content[BUFFER_SIZE];
-};
-
 struct file *load_file(char *file_path)
 {
   FILE *requested_file = NULL;
