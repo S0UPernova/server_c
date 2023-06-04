@@ -16,6 +16,7 @@
 #define PAGE_ROUTE "src/pages"
 #define LAYOUTS_ROUTE "src/layouts"
 #define OK "200 OK"
+#define NOT_FOUND "404 NOT FOUND"
 // todo refactor this, and expand templating to allow components to be popped in... maybe something like angular.
 
 #include "handle_file.h"      // make sure to compile with handle_file.c
@@ -171,24 +172,18 @@ int main()
       file = load_file(file_path);
       if (file == NULL)
       {
-
-        // If it's a directory and index.html doesn't exist, return 404 Not Found response
-        char not_found[] = "HTTP/1.0 404 Not Found\r\n"
-                           "Server: webserver-c\r\n"
-                           "Connection: Closed\r\n"
-                           "Content-Type: text/html\r\n\r\n"
-                           "<html>Page not found</html>\r\n";
-        ssize_t not_found_bytes_written = write(newsockfd, not_found, strlen(not_found));
-        if (not_found_bytes_written < 0)
-        {
-          perror("Error sending 404 response");
-        }
-
+        //todo make this a macro, so that it sortens it.
+        char not_found[] = "<html>Page not found</html>";
+        snprintf(res->content_type, 80, "%s", "text/html");
+        snprintf(res->status, (strlen(NOT_FOUND) + 1), "%s", NOT_FOUND);
+        snprintf(res->content, strlen(not_found), "%s", not_found);
+        res->length = strlen(not_found);
+        respond(newsockfd, res, NULL);
         continue;
       }
     }
 
-    // Load the layout fil
+    // Load the layout file
     char layout_path[PATH_MAX];
     snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
     struct file *layout = load_file(layout_path);
@@ -214,14 +209,14 @@ int main()
       content_type = "text/html";
     }
 
-    //todo figure out a way to make this work for both cases without if statement, maybe move the place holder logic to respond? 
+    // todo figure out a way to make this work for both cases without if statement, maybe move the place holder logic to respond?
     if (strcmp(content_type, "text/html") == 0)
     {
       // Replace the placeholder tag in the layout file with the file contents
       char placeholder[20] = "<body-placeholder/>";
-      //todo... maybe change this to modify a buffer passed in.
+      // todo... maybe change this to modify a buffer passed in.
       char *final_contents = replace_placeholder(layout->content, placeholder, file->content);
-      
+
       snprintf(res->content_type, 80, "%s", content_type);
       snprintf(res->status, (strlen(OK) + 1), "%s", OK);
       snprintf(res->content, strlen(final_contents), "%s", final_contents);

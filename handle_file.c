@@ -93,7 +93,9 @@ ssize_t respond(int socketfd, struct response *response, struct file *file)
     // Construct the HTTP response for the favicon file
     snprintf(temp, (strlen(response->content) + BUFFER_SIZE),
              "HTTP/1.1 %s\r\n"
+             "Server: webserver-c\r\n"
              "Content-Type: %s\r\n"
+             "Connection: Closed\r\n"
              "Content-Length: %ld\r\n\r\n"
              "%s",
              response->status, response->content_type, strlen(response->content), response->content);
