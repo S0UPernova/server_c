@@ -71,9 +71,9 @@ ssize_t respond(int socketfd, struct response *response, struct file *file)
     snprintf(response->content, (strlen(response->content) + BUFFER_SIZE),
              "HTTP/1.1 %s\r\n"
              "Content-Type: %s\r\n"
-             "Content-Length: %ld\r\n\r\n"
+             "Content-Length: %i\r\n\r\n"
              "%s",
-             response->status, response->content_type, strlen(file->content), file->content);
+             response->status, response->content_type, file->size, file->content);
 
     // Send the HTTP response for the file file
     ssize_t file_bytes_written = write(socketfd, response->content, strlen(response->content));
@@ -96,9 +96,9 @@ ssize_t respond(int socketfd, struct response *response, struct file *file)
              "Server: webserver-c\r\n"
              "Content-Type: %s\r\n"
              "Connection: Closed\r\n"
-             "Content-Length: %ld\r\n\r\n"
+             "Content-Length: %i\r\n\r\n"
              "%s",
-             response->status, response->content_type, strlen(response->content), response->content);
+             response->status, response->content_type, response->length, response->content);
 
     // Send the HTTP response for the file file
     ssize_t file_bytes_written = write(socketfd, temp, strlen(temp));
