@@ -37,8 +37,8 @@ struct file *load_file(char *file_path)
     return NULL;
   }
 
-  // not sure if this is needed, but eh
-  file_content[file_size +1] = '\0';
+  // giving the end of the file a 0 byte for string function to work right.
+  file_content[file_size] = '\0';
 
   // Read the file contents into memory
   size_t bytes_read = fread(file_content, 1, file_size, requested_file);
