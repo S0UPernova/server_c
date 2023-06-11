@@ -50,3 +50,47 @@ int ends_with(char *str, char *suffix)
     return 0;
   return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
 }
+
+void replace_all(char **str, char *find, char *replace)
+{
+  int findLen = strlen(find);
+  int replaceLen = strlen(replace);
+  int strLen = strlen(*str);
+
+  // Calculate the new length of the string after replacement
+  int newLen = strLen;
+  int occurrences = 0;
+  char *pos = *str;
+  while((pos = strstr(pos, find)) != NULL)
+  {
+    occurrences++;
+    pos += findLen;
+  }
+  newLen += occurrences * (replaceLen - findLen);
+
+  // Allocate memory fo the modified string
+  char *newStr = (char *)malloc((newLen + 1) * sizeof(char));
+  if (newStr == NULL)
+  {
+    fprintf(stderr, "Memory allocation failed.\n");
+    exit(1);
+  }
+  
+  // Replace all occurrences of the string
+  char *currentPos = *str;
+  char *writePos = newStr;
+  while ((pos = strstr(currentPos, find)) != NULL)
+  {
+    int copyLen = pos - currentPos;
+    strncpy(writePos, currentPos, copyLen);
+    writePos += copyLen;
+    strncpy(writePos, replace, replaceLen);
+    writePos += replaceLen;
+    currentPos = pos + findLen;
+  }
+  strcpy(writePos, currentPos);
+
+  // Free the original string, and assign the modified string
+  free(*str);
+  *str = newStr;
+}

@@ -11,7 +11,7 @@
 struct file *load_file(char *file_path)
 {
   FILE *requested_file = NULL;
-  requested_file = fopen(file_path, "r");
+  requested_file = fopen(file_path, "rb");
   if (requested_file == NULL)
   {
     return NULL;
@@ -20,6 +20,11 @@ struct file *load_file(char *file_path)
   fseek(requested_file, 0, SEEK_END);
   long file_size = ftell(requested_file);
   fseek(requested_file, 0, SEEK_SET);
+
+  if (!file_size > 0)
+  {
+    return NULL;
+  }
 
   // Allocate memory to store the file contents
   // char *file_content = malloc(file_size + 1);
@@ -30,7 +35,6 @@ struct file *load_file(char *file_path)
     free(file_content);
     fclose(requested_file);
     return NULL;
-    // continue;
   }
 
   // Read the file contents into memory
@@ -40,17 +44,15 @@ struct file *load_file(char *file_path)
     perror("Error reading the file");
     fclose(requested_file);
     free(file_content);
-    // continue;
     return NULL;
   }
-  // Add ending NULL byte
-  file_content[file_size] = '\0';
-
-  struct file *output = malloc(sizeof(struct file));
-  output->address = requested_file;
-  output->size = file_size;
-  output->content = file_content;
-  return output;
+  if (requested_file != NULL && bytes_read > 0) {
+    struct file *output = malloc(sizeof(struct file));
+    output->address = requested_file;
+    output->size = file_size;
+    output->content = file_content;
+    return output;
+  }
 }
 
 // Closes struct file, and frees memory used by it.
@@ -71,13 +73,12 @@ ssize_t respond(int socketfd, struct response *response, struct file *file)
     snprintf(response->content, (strlen(response->content) + BUFFER_SIZE),
              "HTTP/1.1 %s\r\n"
              "Content-Type: %s\r\n"
-             "Content-Length: %li\r\n\r\n"
-             "%s",
-             response->status, response->content_type, strlen(file->content), file->content);
+             "Content-Length: %ld\r\n\r\n",
+             response->status, response->content_type, file->size);
 
     // Send the HTTP response for the file file
     ssize_t file_bytes_written = write(socketfd, response->content, strlen(response->content));
-
+    file_bytes_written += write(socketfd, file->content, file->size);
     if (file_bytes_written < 0)
     {
       perror("Error sending response");
@@ -95,7 +96,7 @@ ssize_t respond(int socketfd, struct response *response, struct file *file)
              "HTTP/1.1 %s\r\n"
              "Server: webserver-c\r\n"
              "Content-Type: %s\r\n"
-             "Content-Length: %li\r\n\r\n"
+             "Content-Length: %ld\r\n\r\n"
              "%s",
              response->status, response->content_type, strlen(response->content), response->content);
 

@@ -137,21 +137,23 @@ int main()
     }
 
     // Remove BASE_ROUTE from uri
-    if (strncmp(BASE_ROUTE, uri, strlen(BASE_ROUTE)) == 0)
-    {
-      char temp[BUFFER_SIZE];
-      strncpy(temp, uri, BUFFER_SIZE);
-      if (strlen(temp) == strlen(BASE_ROUTE))
-      {
-        temp[strlen(BASE_ROUTE) - 1] = '/';
-        strncpy(uri, temp + strlen(BASE_ROUTE) -1, BUFFER_SIZE);
-      }
-      else
-      {
-        strncpy(uri, temp + strlen(BASE_ROUTE), BUFFER_SIZE);
-      }
-      printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), method, version, uri);
-    }
+     if (strncmp(BASE_ROUTE, uri, strlen(BASE_ROUTE)) == 0)
+     {
+       char temp[BUFFER_SIZE];
+       strncpy(temp, uri, BUFFER_SIZE);
+    //   if (strlen(temp) == strlen(BASE_ROUTE))
+    //   {
+    //   printf("here\n");
+    //     temp[strlen(BASE_ROUTE) - 1] = '/';
+    //     strncpy(uri, temp + strlen(BASE_ROUTE) -1, BUFFER_SIZE);
+    //   }
+    //   else
+    //   {
+    //   printf("or here?\n");
+       strncpy(uri, temp + strlen(BASE_ROUTE), BUFFER_SIZE);
+     }
+     printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), method, version, uri);
+    // }
 
     // Construct the file path
     char file_path[PATH_MAX + 20] = "";
@@ -206,9 +208,9 @@ int main()
     }
 
     // Load the layout file
-    char layout_path[PATH_MAX];
-    snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
-    struct file *layout = load_file(layout_path);
+    //char layout_path[PATH_MAX];
+    //snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
+    //struct file *layout = load_file(layout_path);
 
     // Construct the HTTP response
     // char response[BUFFER_SIZE]; // todo remove
@@ -234,10 +236,28 @@ int main()
     // todo figure out a way to make this work for both cases without if statement, maybe move the place holder logic to respond?
     if (strcmp(content_type, "text/html") == 0)
     {
+      // Load the layout file
+      char layout_path[PATH_MAX];
+      snprintf(layout_path, sizeof(layout_path), "%s/application.html", LAYOUTS_ROUTE);
+      struct file *layout = load_file(layout_path);
+      if (layout == NULL)
+      {
+        close_file(file);
+        free(res);
+        close(newsockfd);
+        continue;
+      }
+
       // Replace the placeholder tag in the layout file with the file contents
       char placeholder[20] = "<body-placeholder/>";
       // todo... maybe change this to modify a buffer passed in.
       char *final_contents = replace_placeholder(layout->content, placeholder, file->content);
+      replace_all(&final_contents, "{{BASE}}", BASE_ROUTE); 
+      if (final_contents == NULL)
+      {
+        close_file(layout);
+        continue;
+      }
 
       snprintf(res->content_type, 80, "%s", content_type);
       snprintf(res->status, (strlen(OK) + 1), "%s", OK);
@@ -246,6 +266,7 @@ int main()
       respond(newsockfd, res, NULL);
 
       free(final_contents);
+      close_file(layout);
     }
     else
     {
@@ -255,9 +276,9 @@ int main()
       snprintf(res->content, file->size, "%s", file->content);
       res->length = file->size;
       respond(newsockfd, res, file);
+      printf("file_path: %s\n", file_path);
     }
     close_file(file);
-    close_file(layout);
     // free(final_contents);
     close(newsockfd);
     free(res); //! will have to change this later. ~maybe
