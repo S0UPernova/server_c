@@ -13,10 +13,13 @@
 #define PORT 8080
 #define BUFFER_SIZE 1024
 #define PATH_MAX 1024
+#define BASE_ROUTE "/c"
 #define PAGE_ROUTE "src/pages"
 #define LAYOUTS_ROUTE "src/layouts"
 #define OK "200 OK"
 #define NOT_FOUND "404 NOT FOUND"
+// todo add argc && argv to set BASE_ROUTE, ant PORT via flags
+
 // todo refactor this, and expand templating to allow components to be popped in... maybe something like angular.
 
 #include "handle_file.h"      // make sure to compile with handle_file.c
@@ -124,7 +127,31 @@ int main()
     // Read the request
     char method[BUFFER_SIZE], uri[BUFFER_SIZE], version[BUFFER_SIZE] = "";
     sscanf(buffer, "%s %s %s", method, uri, version);
-    printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), method, version, uri);
+    // printf("before:\n[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), method, version, uri);
+
+    // Trim trailing slash
+    if (ends_with(uri, "/"))
+    {
+      int length = strlen(uri);
+      uri[length - 1] = '\0';
+    }
+
+    // Remove BASE_ROUTE from uri
+    if (strncmp(BASE_ROUTE, uri, strlen(BASE_ROUTE)) == 0)
+    {
+      char temp[BUFFER_SIZE];
+      strncpy(temp, uri, BUFFER_SIZE);
+      if (strlen(temp) == strlen(BASE_ROUTE))
+      {
+        temp[strlen(BASE_ROUTE) - 1] = '/';
+        strncpy(uri, temp + strlen(BASE_ROUTE) -1, BUFFER_SIZE);
+      }
+      else
+      {
+        strncpy(uri, temp + strlen(BASE_ROUTE), BUFFER_SIZE);
+      }
+      printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), method, version, uri);
+    }
 
     // Construct the file path
     char file_path[PATH_MAX + 20] = "";
@@ -163,16 +190,11 @@ int main()
     if (file == NULL)
     {
 
-      if (ends_with(uri, "/"))
-      {
-        int length = strlen(uri);
-        uri[length - 1] = '\0';
-      }
       snprintf(file_path, sizeof(file_path), "%s%s.html", PAGE_ROUTE, uri);
       file = load_file(file_path);
       if (file == NULL)
       {
-        //todo make this a macro, so that it sortens it.
+        // todo make this a macro, so that it sortens it.
         char not_found[] = "<html>Page not found</html>";
         snprintf(res->content_type, 80, "%s", "text/html");
         snprintf(res->status, (strlen(NOT_FOUND) + 1), "%s", NOT_FOUND);
