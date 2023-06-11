@@ -203,6 +203,7 @@ int main()
         snprintf(res->content, strlen(not_found), "%s", not_found);
         res->length = strlen(not_found);
         respond(newsockfd, res, NULL);
+        free(res);
         continue;
       }
     }
@@ -282,6 +283,7 @@ int main()
     // free(final_contents);
     close(newsockfd);
     free(res); //! will have to change this later. ~maybe
+    continue;
   }
 
   return 0;
