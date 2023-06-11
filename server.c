@@ -257,6 +257,8 @@ int main()
       if (final_contents == NULL)
       {
         close_file(layout);
+        free(res);
+        close(newsockfd);
         continue;
       }
 
