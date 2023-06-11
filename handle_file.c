@@ -21,7 +21,7 @@ struct file *load_file(char *file_path)
   long file_size = ftell(requested_file);
   fseek(requested_file, 0, SEEK_SET);
 
-  if (!file_size > 0)
+  if (!(file_size > 0))
   {
     return NULL;
   }
@@ -53,6 +53,7 @@ struct file *load_file(char *file_path)
     output->content = file_content;
     return output;
   }
+  return NULL;
 }
 
 // Closes struct file, and frees memory used by it.
